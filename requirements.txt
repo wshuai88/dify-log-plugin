@@ -1,0 +1,2 @@
+paramiko==3.4.0
+dify-client==0.1.10

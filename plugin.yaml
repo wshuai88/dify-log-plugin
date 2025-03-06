@@ -1,0 +1,52 @@
+name: log_viewer
+version: 1.0.0
+description: 通过SSH协议访问服务器的日志文件
+author: Dify Plugin Developer
+repository: https://github.com/yourusername/log-viewer
+license: MIT
+icon: assets/icon.png
+permissions:
+  - network
+  - file_system
+  - process
+credentials:
+  - name: ip_address
+    type: string
+    required: true
+    label: 服务器IP
+    description: 服务器的IP地址
+  - name: port
+    type: integer
+    required: false
+    default: 22
+    label: SSH端口
+    description: SSH服务端口，默认为22
+  - name: username
+    type: string
+    required: true
+    label: 用户名
+    description: SSH登录用户名
+  - name: password
+    type: password
+    required: true
+    label: 密码
+    description: SSH登录密码
+configuration:
+  - name: default_log_path
+    type: string
+    required: false
+    default: "/var/log"
+    label: 默认日志路径
+    description: 默认的日志文件目录
+  - name: max_file_size
+    type: integer
+    required: false
+    default: 1048576
+    label: 最大文件大小
+    description: 最大读取文件大小（字节）
+  - name: max_preview_lines
+    type: integer
+    required: false
+    default: 50
+    label: 预览行数
+    description: 文件预览的最大行数 

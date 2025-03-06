@@ -1,0 +1,158 @@
+tools:
+  - name: list_log_files
+    description: 列出Ubuntu系统中的日志文件
+    parameters:
+      - name: log_path
+        type: string
+        required: true
+        description: 日志文件所在的目录路径
+      - name: file_pattern
+        type: string
+        required: false
+        default: "*.log"
+        description: 文件匹配模式，支持通配符
+      - name: read_content
+        type: boolean
+        required: false
+        default: false
+        description: 是否读取文件内容
+      - name: max_file_size
+        type: integer
+        required: false
+        default: 1048576
+        description: 最大读取文件大小（字节）
+      - name: max_preview_lines
+        type: integer
+        required: false
+        default: 50
+        description: 预览行数
+      - name: search_pattern
+        type: string
+        required: false
+        description: 内容搜索模式（正则表达式）
+      - name: max_depth
+        type: integer
+        required: false
+        default: 3
+        description: 最大递归深度
+    returns:
+      - name: file_list
+        type: array
+        description: 日志文件列表
+      - name: total_files
+        type: integer
+        description: 文件总数
+      - name: total_size
+        type: integer
+        description: 总大小（字节）
+      - name: filtered_files
+        type: integer
+        description: 被过滤的文件数
+      - name: error
+        type: string
+        description: 错误信息
+      - name: execution_time
+        type: number
+        description: 执行时间（秒）
+        
+  - name: read_log_file
+    description: 读取单个日志文件内容
+    parameters:
+      - name: file_path
+        type: string
+        required: true
+        description: 日志文件的完整路径
+      - name: max_file_size
+        type: integer
+        required: false
+        default: 1048576
+        description: 最大读取文件大小（字节）
+      - name: max_preview_lines
+        type: integer
+        required: false
+        default: 50
+        description: 预览行数
+      - name: search_pattern
+        type: string
+        required: false
+        description: 内容搜索模式（正则表达式）
+    returns:
+      - name: content
+        type: string
+        description: 文件完整内容
+      - name: preview
+        type: string
+        description: 文件预览内容
+      - name: matches
+        type: array
+        description: 匹配的行
+      - name: total_lines
+        type: integer
+        description: 总行数
+      - name: is_truncated
+        type: boolean
+        description: 内容是否被截断
+      - name: encoding
+        type: string
+        description: 文件编码
+      - name: is_binary
+        type: boolean
+        description: 是否为二进制文件
+      - name: mime_type
+        type: string
+        description: 文件MIME类型
+      - name: error
+        type: string
+        description: 错误信息
+        
+  - name: download_file
+    description: 下载日志文件
+    parameters:
+      - name: file_path
+        type: string
+        required: true
+        description: 日志文件的完整路径
+      - name: max_download_size
+        type: integer
+        required: false
+        default: 10485760
+        description: 最大下载文件大小（字节，默认10MB）
+    returns:
+      - name: success
+        type: boolean
+        description: 是否成功
+      - name: file_name
+        type: string
+        description: 文件名
+      - name: file_size
+        type: integer
+        description: 文件大小（字节）
+      - name: file_content_base64
+        type: string
+        description: Base64编码的文件内容
+      - name: mime_type
+        type: string
+        description: 文件MIME类型
+      - name: error
+        type: string
+        description: 错误信息
+        
+  - name: tail_log_file
+    description: 查看日志文件末尾内容（类似tail命令）
+    parameters:
+      - name: file_path
+        type: string
+        required: true
+        description: 日志文件的完整路径
+      - name: lines
+        type: integer
+        required: false
+        default: 10
+        description: 要显示的行数
+    returns:
+      - name: lines
+        type: array
+        description: 文件末尾的行内容
+      - name: error
+        type: string
+        description: 错误信息 
