@@ -49,4 +49,40 @@ configuration:
     required: false
     default: 50
     label: 预览行数
-    description: 文件预览的最大行数 
+    description: 文件预览的最大行数
+  - name: chunk_size
+    type: integer
+    required: false
+    default: 5242880
+    label: 块大小
+    description: 日志分块读取大小（字节）
+  - name: cache_size
+    type: integer
+    required: false
+    default: 104857600
+    label: 缓存大小
+    description: 最大缓存大小（字节）
+  - name: connection_timeout
+    type: integer
+    required: false
+    default: 30
+    label: 连接超时
+    description: SSH连接超时时间（秒）
+  - name: command_timeout
+    type: integer
+    required: false
+    default: 60
+    label: 命令超时
+    description: SSH命令执行超时时间（秒）
+  - name: search_fields
+    type: array
+    required: false
+    default: ["timestamp", "level", "message"]
+    label: 搜索字段
+    description: 可搜索的日志字段列表
+  - name: binary_patterns
+    type: object
+    required: false
+    default: {}
+    label: 二进制模式
+    description: 16进制报文的模式定义 

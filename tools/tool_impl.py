@@ -50,24 +50,26 @@ class LogTool:
         normalized_path = os.path.normpath(path)
         
         # 检查是否为绝对路径
-        if not os.path.isabs(normalized_path):
+        if not normalized_path.startswith('/'):
             self.logger.warning(f"路径不是绝对路径: {path}")
             return False
             
         # 检查是否为危险路径
         for dangerous_path in self._dangerous_paths:
             if fnmatch(normalized_path, dangerous_path):
-                self.logger.warning(f"检测到危险路径: {path} 匹配 {dangerous_path}")
+                self.logger.warning(f"尝试访问危险路径: {path}")
                 return False
                 
         return True
         
     def _is_command_safe(self, command: str) -> bool:
         """检查命令是否安全"""
+        # 检查危险命令
         for dangerous_cmd in self._dangerous_commands:
             if dangerous_cmd in command:
-                self.logger.warning(f"检测到危险命令: {command} 包含 {dangerous_cmd}")
+                self.logger.warning(f"命令包含危险操作: {command}")
                 return False
+                
         return True
         
     def _detect_encoding(self, sftp, file_path: str) -> str:
@@ -496,161 +498,266 @@ class LogTool:
         
     def list_log_files(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """列出日志文件"""
-        try:
-            # 获取参数
-            log_path = params.get('log_path', '/var/log')
-            
-            # 检查路径是否安全
-            if not self._is_path_safe(log_path):
-                return {
-                    'file_list': [],
-                    'total_files': 0,
-                    'total_size': 0,
-                    'filtered_files': 0,
-                    'error': f"路径不安全: {log_path}",
-                    'execution_time': 0
-                }
-                
-            # 获取SSH连接
-            ssh = self.provider.get_connection()
-            if not ssh:
-                return {
-                    'file_list': [],
-                    'total_files': 0,
-                    'total_size': 0,
-                    'filtered_files': 0,
-                    'error': "无法建立SSH连接",
-                    'execution_time': 0
-                }
-                
-            # 获取SFTP客户端
-            sftp = ssh.open_sftp()
-            
-            try:
-                # 列出文件
-                result = self._list_files(sftp, log_path, params)
-                return result
-            finally:
-                sftp.close()
-                
-        except Exception as e:
-            self.logger.error(f"列出日志文件时出错: {str(e)}")
-            return {
-                'file_list': [],
-                'total_files': 0,
-                'total_size': 0,
-                'filtered_files': 0,
-                'error': f"列出日志文件时出错: {str(e)}",
-                'execution_time': 0
-            }
-            
-    def read_log_file(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """读取日志文件内容"""
         result = {
-            'content': '',
-            'preview': '',
-            'matches': [],
-            'total_lines': 0,
-            'is_truncated': False,
-            'encoding': 'utf-8',
-            'is_binary': False,
-            'mime_type': None,
+            'files': [],
+            'total_count': 0,
             'error': None
         }
         
-        try:
-            # 获取参数
-            file_path = params.get('file_path')
-            if not file_path:
-                result['error'] = "未指定文件路径"
-                return result
-                
-            # 检查路径是否安全
-            if not self._is_path_safe(file_path):
-                result['error'] = f"路径不安全: {file_path}"
-                return result
-                
-            # 获取最大文件大小和预览行数
-            max_file_size = params.get('max_file_size', 1048576)  # 默认1MB
-            max_preview_lines = params.get('max_preview_lines', 50)
-            
-            # 获取搜索模式
-            search_pattern = params.get('search_pattern')
-            
-            # 获取SSH连接
-            ssh = self.provider.get_connection()
-            if not ssh:
-                result['error'] = "无法建立SSH连接"
-                return result
-                
-            # 获取SFTP客户端
-            sftp = ssh.open_sftp()
-            
-            try:
-                # 读取文件内容
-                result = self._read_file_content(
-                    sftp, file_path, max_file_size, max_preview_lines, search_pattern
-                )
-                return result
-            finally:
-                sftp.close()
-                
-        except Exception as e:
-            self.logger.error(f"读取日志文件内容时出错: {str(e)}")
-            result['error'] = f"读取日志文件内容时出错: {str(e)}"
+        # 获取参数
+        log_path = params.get('log_path', '/var/log')
+        pattern = params.get('pattern', '*.log')
+        recursive = params.get('recursive', False)
+        max_depth = params.get('max_depth', 3)
+        
+        # 验证路径
+        if not self._is_path_safe(log_path):
+            result['error'] = "路径不安全"
             return result
             
+        try:
+            # 获取SFTP连接
+            ssh = self.provider.get_connection_with_retry()
+            sftp = ssh.open_sftp()
+            
+            # 递归列出文件
+            files = []
+            self._list_files_recursive(sftp, log_path, pattern, files, 0, max_depth if recursive else 1)
+            
+            # 处理文件信息
+            for file_info in files:
+                # 获取文件状态
+                try:
+                    stat = sftp.stat(file_info['path'])
+                    file_info.update({
+                        'size': stat.st_size,
+                        'size_human': self._human_readable_size(stat.st_size),
+                        'mtime': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        'mode': stat.st_mode
+                    })
+                except Exception as e:
+                    self.logger.warning(f"获取文件状态失败: {str(e)}")
+                    continue
+                    
+            # 设置结果
+            result['files'] = files
+            result['total_count'] = len(files)
+            
+        except Exception as e:
+            result['error'] = str(e)
+            self.logger.error(f"列出日志文件时出错: {str(e)}")
+            
+        return result
+        
+    def _list_files_recursive(self, sftp, path: str, pattern: str, files: List[Dict[str, Any]], 
+                            current_depth: int, max_depth: int) -> None:
+        """递归列出文件"""
+        if current_depth >= max_depth:
+            return
+            
+        try:
+            # 列出目录内容
+            for entry in sftp.listdir_attr(path):
+                name = entry.filename
+                full_path = os.path.join(path, name)
+                
+                if stat.S_ISDIR(entry.st_mode):
+                    # 递归处理子目录
+                    self._list_files_recursive(sftp, full_path, pattern, files, 
+                                            current_depth + 1, max_depth)
+                elif fnmatch(name, pattern):
+                    # 添加匹配的文件
+                    files.append({
+                        'name': name,
+                        'path': full_path
+                    })
+        except Exception as e:
+            self.logger.warning(f"列出目录失败: {path}, 错误: {str(e)}")
+            
+    def read_log_chunk(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """读取日志块"""
+        result = {
+            'content': '',
+            'position': 0,
+            'eof': False,
+            'error': None
+        }
+        
+        # 获取参数
+        file_path = params.get('file_path')
+        start_pos = params.get('position', 0)
+        chunk_size = params.get('chunk_size')
+        
+        # 验证参数
+        if not file_path:
+            result['error'] = "缺少必要的参数: file_path"
+            return result
+            
+        # 验证路径
+        if not self._is_path_safe(file_path):
+            result['error'] = "路径不安全"
+            return result
+            
+        try:
+            # 读取文件块
+            content, position, eof = self.provider.read_file_chunk(file_path, start_pos, chunk_size)
+            
+            # 设置结果
+            result['content'] = base64.b64encode(content).decode('utf-8')
+            result['position'] = position
+            result['eof'] = eof
+            
+        except Exception as e:
+            result['error'] = str(e)
+            self.logger.error(f"读取日志块时出错: {str(e)}")
+            
+        return result
+        
+    def search_log_content(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """搜索日志内容"""
+        result = {
+            'matches': [],
+            'total_matches': 0,
+            'error': None
+        }
+        
+        # 获取参数
+        file_path = params.get('file_path')
+        pattern = params.get('pattern')
+        max_matches = params.get('max_matches', 100)
+        context_lines = params.get('context_lines', 2)
+        
+        # 验证参数
+        if not file_path or not pattern:
+            result['error'] = "缺少必要的参数"
+            return result
+            
+        # 验证路径
+        if not self._is_path_safe(file_path):
+            result['error'] = "路径不安全"
+            return result
+            
+        try:
+            # 构建grep命令
+            grep_cmd = f"grep -C {context_lines} -n '{pattern}' '{file_path}'"
+            if not self._is_command_safe(grep_cmd):
+                result['error'] = "命令不安全"
+                return result
+                
+            # 执行搜索
+            ssh = self.provider.get_connection_with_retry()
+            stdin, stdout, stderr = ssh.exec_command(grep_cmd)
+            
+            # 处理结果
+            matches = []
+            for line in stdout:
+                line = line.strip()
+                if line:
+                    # 解析行号和内容
+                    if ':' in line:
+                        line_num, content = line.split(':', 1)
+                        matches.append({
+                            'line_number': int(line_num),
+                            'content': content
+                        })
+                        
+                    if len(matches) >= max_matches:
+                        break
+                        
+            # 设置结果
+            result['matches'] = matches
+            result['total_matches'] = len(matches)
+            
+        except Exception as e:
+            result['error'] = str(e)
+            self.logger.error(f"搜索日志内容时出错: {str(e)}")
+            
+        return result
+        
+    def extract_binary_message(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """提取二进制报文"""
+        result = {
+            'messages': [],
+            'total_messages': 0,
+            'error': None
+        }
+        
+        # 获取参数
+        file_path = params.get('file_path')
+        pattern = params.get('pattern')
+        max_messages = params.get('max_messages', 100)
+        
+        # 验证参数
+        if not file_path or not pattern:
+            result['error'] = "缺少必要的参数"
+            return result
+            
+        # 验证路径
+        if not self._is_path_safe(file_path):
+            result['error'] = "路径不安全"
+            return result
+            
+        try:
+            # 读取文件内容
+            content, _, _ = self.provider.read_file_chunk(file_path)
+            
+            # 获取二进制解析器
+            parser = self.provider.parser_factory.get_parser("binary")
+            
+            # 提取报文
+            messages = parser.extract_hex_message(content, pattern)
+            
+            # 限制结果数量
+            if len(messages) > max_messages:
+                messages = messages[:max_messages]
+                
+            # 设置结果
+            result['messages'] = messages
+            result['total_messages'] = len(messages)
+            
+        except Exception as e:
+            result['error'] = str(e)
+            self.logger.error(f"提取二进制报文时出错: {str(e)}")
+            
+        return result
+        
     def tail_log_file(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """查看日志文件末尾内容"""
+        """查看文件末尾内容"""
         result = {
             'lines': [],
             'error': None
         }
         
-        try:
-            # 获取参数
-            file_path = params.get('file_path')
-            if not file_path:
-                result['error'] = "未指定文件路径"
-                return result
-                
-            # 检查路径是否安全
-            if not self._is_path_safe(file_path):
-                result['error'] = f"路径不安全: {file_path}"
-                return result
-                
-            # 获取行数
-            lines_count = params.get('lines', 10)
-            if lines_count <= 0:
-                lines_count = 10
-            elif lines_count > 1000:
-                lines_count = 1000
-                
-            # 获取SSH连接
-            ssh = self.provider.get_connection()
-            if not ssh:
-                result['error'] = "无法建立SSH连接"
-                return result
-                
-            # 使用tail命令获取文件末尾内容
-            cmd = f"tail -n {lines_count} {shlex.quote(file_path)}"
-            stdin, stdout, stderr = ssh.exec_command(cmd)
-            exit_code = stdout.channel.recv_exit_status()
-            
-            if exit_code != 0:
-                error = stderr.read().decode('utf-8', errors='replace')
-                result['error'] = f"获取文件末尾内容时出错: {error}"
-                return result
-                
-            # 读取输出
-            output = stdout.read().decode('utf-8', errors='replace')
-            lines = output.splitlines()
-            
-            # 更新结果
-            result['lines'] = lines
-            
+        # 获取参数
+        file_path = params.get('file_path')
+        line_count = params.get('lines', 10)
+        
+        # 验证参数
+        if not file_path:
+            result['error'] = "缺少必要的参数: file_path"
             return result
+            
+        # 验证路径
+        if not self._is_path_safe(file_path):
+            result['error'] = "路径不安全"
+            return result
+            
+        try:
+            # 构建tail命令
+            tail_cmd = f"tail -n {line_count} '{file_path}'"
+            if not self._is_command_safe(tail_cmd):
+                result['error'] = "命令不安全"
+                return result
+                
+            # 执行命令
+            ssh = self.provider.get_connection_with_retry()
+            stdin, stdout, stderr = ssh.exec_command(tail_cmd)
+            
+            # 处理结果
+            result['lines'] = [line.strip() for line in stdout]
+            
         except Exception as e:
-            self.logger.error(f"查看日志文件末尾内容时出错: {str(e)}")
-            result['error'] = f"查看日志文件末尾内容时出错: {str(e)}"
-            return result 
+            result['error'] = str(e)
+            self.logger.error(f"查看文件末尾内容时出错: {str(e)}")
+            
+        return result 

@@ -1,60 +1,98 @@
 tools:
   - name: list_log_files
-    description: 列出Ubuntu系统中的日志文件
+    description: 列出日志文件
     parameters:
       - name: log_path
         type: string
-        required: true
-        description: 日志文件所在的目录路径
-      - name: file_pattern
+        required: false
+        default: "/var/log"
+        description: 日志文件目录
+      - name: pattern
         type: string
         required: false
         default: "*.log"
-        description: 文件匹配模式，支持通配符
-      - name: read_content
+        description: 文件名匹配模式
+      - name: recursive
         type: boolean
         required: false
         default: false
-        description: 是否读取文件内容
-      - name: max_file_size
-        type: integer
-        required: false
-        default: 1048576
-        description: 最大读取文件大小（字节）
-      - name: max_preview_lines
-        type: integer
-        required: false
-        default: 50
-        description: 预览行数
-      - name: search_pattern
-        type: string
-        required: false
-        description: 内容搜索模式（正则表达式）
+        description: 是否递归搜索子目录
       - name: max_depth
         type: integer
         required: false
         default: 3
         description: 最大递归深度
-    returns:
-      - name: file_list
-        type: array
-        description: 日志文件列表
-      - name: total_files
-        type: integer
-        description: 文件总数
-      - name: total_size
-        type: integer
-        description: 总大小（字节）
-      - name: filtered_files
-        type: integer
-        description: 被过滤的文件数
-      - name: error
+
+  - name: read_log_chunk
+    description: 分块读取日志文件
+    parameters:
+      - name: file_path
         type: string
-        description: 错误信息
-      - name: execution_time
-        type: number
-        description: 执行时间（秒）
-        
+        required: true
+        description: 日志文件路径
+      - name: position
+        type: integer
+        required: false
+        default: 0
+        description: 起始位置
+      - name: chunk_size
+        type: integer
+        required: false
+        default: 5242880
+        description: 块大小（字节）
+
+  - name: search_log_content
+    description: 搜索日志内容
+    parameters:
+      - name: file_path
+        type: string
+        required: true
+        description: 日志文件路径
+      - name: pattern
+        type: string
+        required: true
+        description: 搜索模式
+      - name: max_matches
+        type: integer
+        required: false
+        default: 100
+        description: 最大匹配数
+      - name: context_lines
+        type: integer
+        required: false
+        default: 2
+        description: 上下文行数
+
+  - name: extract_binary_message
+    description: 提取16进制报文
+    parameters:
+      - name: file_path
+        type: string
+        required: true
+        description: 日志文件路径
+      - name: pattern
+        type: string
+        required: true
+        description: 16进制报文模式
+      - name: max_messages
+        type: integer
+        required: false
+        default: 100
+        description: 最大报文数
+
+  - name: tail_log_file
+    description: 查看文件末尾内容
+    parameters:
+      - name: file_path
+        type: string
+        required: true
+        description: 日志文件路径
+      - name: lines
+        type: integer
+        required: false
+        default: 10
+        description: 显示的行数
+
   - name: read_log_file
     description: 读取单个日志文件内容
     parameters:
