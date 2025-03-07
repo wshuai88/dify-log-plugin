@@ -6,6 +6,7 @@ import time
 import re
 import io
 import os
+import stat
 import base64
 import tempfile
 import shlex
@@ -13,7 +14,10 @@ from typing import List, Dict, Any, Optional, Tuple, BinaryIO
 from datetime import datetime
 from fnmatch import fnmatch
 
-from ..provider import LogProvider
+# 使用绝对导入
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from provider import LogProvider
 
 class LogTool:
     """日志工具，实现日志文件查询和内容读取功能"""
